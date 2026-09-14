@@ -29,10 +29,6 @@ log = "0.4.22"
 serde = { version = "1.0.218", optional = true, features = ["derive"] }
 thiserror = "2.0.11"
 fixed = "1.27"
-half = "2.4"
-proc-macro-crate = "3.3"
-indexmap = "2.11"
-az = "1.2"
 
 [features]
 default = []
