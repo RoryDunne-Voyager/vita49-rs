@@ -478,6 +478,63 @@ impl Vrt {
         Ok(self.payload.signal_data()?.payload())
     }
 
+    /// Get a mutable slice of the packet payload.
+    ///
+    /// Use this to modify a payload in-place, avoiding the allocation when calling
+    /// [`Self::set_signal_payload`]. The length does not change, so there is no need to call
+    /// [`crate::Vrt::update_packet_size`]. To change the length and mutate, use
+    /// [`Self::resize_signal_payload`].
+    ///
+    /// # Errors
+    /// This function should only be used with a signal data packet type. Use
+    /// of this function on other packet types will return an error.
+    ///
+    /// # Example
+    /// ```
+    /// use vita49::prelude::*;
+    /// # fn main() -> Result<(), VitaError> {
+    /// let mut packet = Vrt::new_signal_data_packet();
+    /// packet.set_signal_payload(&[1, 2, 3, 4])?;
+    /// packet.signal_payload_mut()?.reverse();
+    /// assert_eq!(packet.signal_payload()?, &[4, 3, 2, 1]);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn signal_payload_mut(&mut self) -> Result<&mut [u8], VitaError> {
+        Ok(self.payload.signal_data_mut()?.payload_mut())
+    }
+
+    /// Resize the packet payload.
+    ///
+    /// Use this to resize a payload before modifying it in-place, avoiding the allocation when
+    /// calling [`Self::set_signal_payload`]. Growing the payload zeroes the new bytes, and
+    /// shrinking it truncates. The length may change and the packet size is updated
+    /// automatically so calling [`crate::Vrt::update_packet_size`] is not necessary. To keep the
+    /// length and mutate, use [`Self::signal_payload_mut`].
+    ///
+    /// # Errors
+    /// This function should only be used with a signal data packet type. Use
+    /// of this function on other packet types will return an error.
+    ///
+    /// # Example
+    /// ```
+    /// use vita49::prelude::*;
+    /// # fn main() -> Result<(), VitaError> {
+    /// let mut packet = Vrt::new_signal_data_packet();
+    /// packet.set_signal_payload(&[1, 2, 3, 4])?;
+    /// packet.resize_signal_payload(8)?;
+    /// packet.signal_payload_mut()?.copy_from_slice(&[5, 6, 7, 8, 9, 10, 11, 12]);
+    /// assert_eq!(packet.signal_payload()?, &[5, 6, 7, 8, 9, 10, 11, 12]);
+    /// assert_eq!(packet.header().packet_size(), 4);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn resize_signal_payload(&mut self, len: usize) -> Result<(), VitaError> {
+        self.payload.signal_data_mut()?.resize_payload(len);
+        self.update_packet_size();
+        Ok(())
+    }
+
     /// Set the packet payload to some raw bytes (signal data only).
     /// Can be an owned `Vec<u8>` (zero-copy) or a `&[u8]` slice which
     /// will allocate under the hood.
@@ -623,5 +680,41 @@ mod tests {
         let parsed = Vrt::try_from(&bytes[..]).unwrap();
         assert_eq!(parsed.stream_id(), Some(0));
         assert_eq!(parsed.header().packet_type(), PacketType::Context);
+    }
+
+    #[test]
+    fn resize_signal_payload_updates_the_packet_size() {
+        use crate::prelude::*;
+        let mut packet = Vrt::new_signal_data_packet();
+        packet.set_signal_payload([1, 2, 3, 4]).unwrap();
+        let before = packet.header().packet_size();
+
+        packet.resize_signal_payload(16).unwrap();
+        packet
+            .signal_payload_mut()
+            .unwrap()
+            .copy_from_slice(&[9u8; 16]);
+
+        assert_eq!(packet.signal_payload().unwrap(), &[9u8; 16]);
+        assert_eq!(packet.header().packet_size(), before + 3);
+
+        // The size the header states has to survive a round trip through the wire.
+        let bytes = packet.to_bytes().unwrap();
+        let parsed = Vrt::try_from(&bytes[..]).unwrap();
+        assert_eq!(parsed.signal_payload().unwrap(), &[9u8; 16]);
+    }
+
+    #[test]
+    fn payload_accessors_error_on_non_signal_data() {
+        use crate::prelude::*;
+        let mut packet = Vrt::new_context_packet();
+        assert!(matches!(
+            packet.signal_payload_mut(),
+            Err(VitaError::SignalDataOnly)
+        ));
+        assert!(matches!(
+            packet.resize_signal_payload(4),
+            Err(VitaError::SignalDataOnly)
+        ));
     }
 }

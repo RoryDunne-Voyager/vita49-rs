@@ -102,6 +102,30 @@ impl SignalData {
         &self.data
     }
 
+    /// Get the data payload as a mutable slice (zero-copy).
+    ///
+    /// Use this to modify a payload in-place, avoiding the allocation when calling
+    /// [`Self::set_payload`]. The length does not change, so there is no need to call
+    /// [`crate::Vrt::update_packet_size`]. To change the length and mutate, use
+    /// [`Self::resize_payload`].
+    ///
+    /// # Example
+    /// ```
+    /// # use std::io;
+    /// use vita49::prelude::*;
+    /// # fn main() -> Result<(), VitaError> {
+    /// let mut packet = Vrt::new_signal_data_packet();
+    /// packet.set_signal_payload(&[1, 2, 3, 4])?;
+    /// let sig_data = packet.payload_mut().signal_data_mut()?;
+    /// sig_data.payload_mut().reverse();
+    /// assert_eq!(packet.signal_payload()?, &[4, 3, 2, 1]);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn payload_mut(&mut self) -> &mut [u8] {
+        &mut self.data
+    }
+
     /// Consume the struct and take ownership of the underlying payload bytes (zero-copy).
     ///
     /// # Example
@@ -154,6 +178,33 @@ impl SignalData {
         }
         self.data = data;
         Ok(())
+    }
+
+    /// Resize the data payload.
+    ///
+    /// Use this to resize a payload before modifying it in-place, avoiding the allocation when
+    /// calling [`Self::set_payload`]. Growing the payload zeroes the new bytes, and shrinking it
+    /// truncates. The length may change, so you must call
+    /// [`crate::Vrt::update_packet_size`]. To keep the length and mutate, use
+    /// [`Self::payload_mut`].
+    ///
+    /// # Example
+    /// ```
+    /// # use std::io;
+    /// use vita49::prelude::*;
+    /// # fn main() -> Result<(), VitaError> {
+    /// let mut packet = Vrt::new_signal_data_packet();
+    /// packet.set_signal_payload(&[1, 2, 3, 4])?;
+    /// let sig_data = packet.payload_mut().signal_data_mut()?;
+    /// sig_data.resize_payload(8);
+    /// sig_data.payload_mut().copy_from_slice(&[5, 6, 7, 8, 9, 10, 11, 12]);
+    /// packet.update_packet_size();
+    /// assert_eq!(packet.signal_payload()?, &[5, 6, 7, 8, 9, 10, 11, 12]);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn resize_payload(&mut self, len: usize) {
+        self.data.resize(len, 0);
     }
 
     /// Gets the size of the payload in 32-bit words.
