@@ -114,4 +114,5 @@ jobs:
           cargo update -p proc-macro-crate --precise 3.3.0
           cargo update -p indexmap --precise 2.11.4
           cargo update -p az --precise 1.2.1
+          cargo update -p thiserror@2.0.21 --precise 2.0.20
           cargo build --all-features --package vita49
